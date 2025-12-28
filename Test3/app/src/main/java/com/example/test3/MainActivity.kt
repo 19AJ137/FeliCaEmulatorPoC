@@ -6,7 +6,6 @@ import android.nfc.TagLostException
 import android.nfc.tech.NfcF
 import android.os.Bundle
 import android.util.Log
-import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -19,8 +18,6 @@ import com.example.test3.databinding.ActivityMainBinding
 class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
     private lateinit var binding: ActivityMainBinding
     private lateinit var statusTextView: TextView
-    private lateinit var cancelButton: Button
-
     private var nfcAdapter: NfcAdapter? = null
 
     private val myIDm = byteArrayOf(0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88.toByte())
@@ -55,13 +52,6 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
         setContentView(binding.root)
 
         statusTextView = binding.statusTextView
-        cancelButton = binding.cancelButton
-
-        cancelButton.isEnabled = false
-
-        cancelButton.setOnClickListener {
-            flag = false
-        }
 
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
 
@@ -143,10 +133,6 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
         } finally {
             nfcF.close()
         }
-
-        runOnUiThread {
-            cancelButton.isEnabled = false
-        }
     }
 
     private fun auth1(nfcF: NfcF, tag: Tag): Boolean {
@@ -184,13 +170,10 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
         var command: ByteArray
         try {
+            // ダミーコマンドを送りレスポンスをコマンドとして受け取る
             command = nfcF.transceive(byteArrayOf(1))
         } catch (e: TagLostException) {
             return false
-        }
-
-        runOnUiThread {
-            cancelButton.isEnabled = true
         }
 
         flag = true
