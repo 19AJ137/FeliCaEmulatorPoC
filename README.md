@@ -1,0 +1,2 @@
+# FeliCaEmulatorPoC
+AndroidでFeliCaカードのエミュレートを行う実証コードです
