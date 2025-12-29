@@ -156,6 +156,7 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
             }
         } finally {
             nfcF?.close()
+            nfcF = null
         }
     }
 
@@ -216,28 +217,28 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
                 statusTextView.text = "エミュレート中"
             }
 
-            try {
-                val response: ByteArray = when (command[1].toInt()) {
-                    0x00 -> when (command[4].toInt()) {
-                        0x00 -> responsePolling
-                        0x01 -> responsePolling2
-                        else -> responsePolling
-                    }
-
-                    0x01 -> byteArrayOf(1)
-                    0x0C -> responseSSC
-                    else -> {
-                        Log.w(TAG, "Unknown Command")
-                        runOnUiThread {
-                            Toast.makeText(this, "不明なコマンド", Toast.LENGTH_LONG)
-                                .show()
-                        }
-                        return false
-                    }
+            val response: ByteArray = when (command[1].toInt()) {
+                0x00 -> when (command[4].toInt()) {
+                    0x00 -> responsePolling
+                    0x01 -> responsePolling2
+                    else -> responsePolling
                 }
 
-                Log.d(TAG, "response: ${response.toHexString()}")
+                0x01 -> byteArrayOf(1)
+                0x0C -> responseSSC
+                else -> {
+                    Log.w(TAG, "Unknown Command")
+                    runOnUiThread {
+                        Toast.makeText(this, "不明なコマンド", Toast.LENGTH_LONG)
+                            .show()
+                    }
+                    return false
+                }
+            }
 
+            Log.d(TAG, "response: ${response.toHexString()}")
+
+            try {
                 command = nfcF?.transceive(response) ?: return false
             } catch (e: TagLostException) {
                 return true
