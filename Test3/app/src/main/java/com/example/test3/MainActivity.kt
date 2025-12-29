@@ -70,11 +70,19 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
     override fun onResume() {
         super.onResume()
+        enableReaderMode()
+    }
 
+    override fun onPause() {
+        super.onPause()
+        disableReaderMode()
+    }
+
+    private fun enableReaderMode() {
         // リーダーモードの有効化
         val flags = NfcAdapter.FLAG_READER_NFC_F or // FeliCaを読み取る
                 NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK // NDEFチェックをスキップ
-        // or NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS // システム音を無効化
+        // NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS // システム音を無効化
 
         val options = Bundle()
         // 読み取り時の音を抑制したい場合は以下を追加（任意）
@@ -88,8 +96,7 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
         )
     }
 
-    override fun onPause() {
-        super.onPause()
+    private fun disableReaderMode() {
         // リーダーモードの無効化
         nfcAdapter?.disableReaderMode(this)
     }
@@ -133,6 +140,9 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
         } finally {
             nfcF.close()
         }
+
+        disableReaderMode()
+        enableReaderMode()
     }
 
     private fun auth1(nfcF: NfcF, tag: Tag): Boolean {
@@ -186,6 +196,7 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
             try {
                 val response: ByteArray = when (command[1].toInt()) {
                     0x00 -> responsePolling
+                    0x01 -> byteArrayOf(1)
                     0x0C -> responseSSC
                     else -> {
                         Log.w(TAG, "Unknown Command")
@@ -196,6 +207,8 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
                         return false
                     }
                 }
+
+                Log.d(TAG, "response: ${response.toHexString()}")
 
                 command = nfcF.transceive(response)
             } catch (e: TagLostException) {
