@@ -13,12 +13,15 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.example.test3.databinding.ActivityMainBinding
+import java.io.IOException
+import kotlin.concurrent.thread
 
 @OptIn(ExperimentalStdlibApi::class)
 class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
     private lateinit var binding: ActivityMainBinding
     private lateinit var statusTextView: TextView
     private var nfcAdapter: NfcAdapter? = null
+    private var nfcF: NfcF? = null
 
     private val myIDm = byteArrayOf(0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88.toByte())
     private val myPMm = byteArrayOf(
@@ -31,9 +34,10 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
         0xFF.toByte(),
         0xFF.toByte()
     )
+    private val mySys = byteArrayOf(0xAB.toByte(), 0xCD.toByte())
 
     companion object {
-        private const val TAG = "NFC"
+        private const val TAG = "FeliCaEmulatorPoC"
     }
 
     var flag = false
@@ -53,19 +57,32 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
         statusTextView = binding.statusTextView
 
-        nfcAdapter = NfcAdapter.getDefaultAdapter(this)
+        statusTextView.text = "ロード中"
 
-        if (nfcAdapter == null) {
-            statusTextView.text = "このデバイスはNFCに対応していません"
-            return
+        thread {
+            nfcAdapter = NfcAdapter.getDefaultAdapter(this)
+
+            if (nfcAdapter == null) {
+                runOnUiThread {
+                    statusTextView.text = "このデバイスはNFCに対応していません"
+                }
+                return@thread
+            }
+
+            if (!nfcAdapter!!.isEnabled) {
+                runOnUiThread {
+                    statusTextView.text = "NFC機能が無効です"
+                }
+                return@thread
+            }
+
+            runOnUiThread {
+                statusTextView.text = "FeliCaをかざしてください"
+            }
+
+            disableReaderMode()
+            enableReaderMode()
         }
-
-        if (!nfcAdapter!!.isEnabled) {
-            statusTextView.text = "NFC機能が無効です"
-            return
-        }
-
-        statusTextView.text = "FeliCaをかざしてください"
     }
 
     override fun onResume() {
@@ -103,23 +120,23 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
     // カードを検知した際のコールバック（別スレッドで動作）
     override fun onTagDiscovered(tag: Tag) {
-        val nfcF = NfcF.get(tag) ?: return
+        nfcF = NfcF.get(tag) ?: return
 
         try {
-            nfcF.connect()
+            nfcF?.connect()
 
             runOnUiThread {
                 statusTextView.text = "スマートフォンをリーダにかざしてください"
             }
 
             // Authentication1コマンドでFeliCaを黙らす（ポーリングに応答させない）
-            val resultAuth1 = auth1(nfcF, tag)
+            val resultAuth1 = auth1(tag)
 
             if (!resultAuth1) {
                 Log.w(TAG, "Auth1 failed")
             }
 
-            val resultEmulate = emulate(nfcF)
+            val resultEmulate = emulate()
 
             if (!resultEmulate) {
                 Log.w(TAG, "Emulate failed")
@@ -138,14 +155,11 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
                 statusTextView.text = "エラーが発生しました\n${e.stackTraceToString()}"
             }
         } finally {
-            nfcF.close()
+            nfcF?.close()
         }
-
-        disableReaderMode()
-        enableReaderMode()
     }
 
-    private fun auth1(nfcF: NfcF, tag: Tag): Boolean {
+    private fun auth1(tag: Tag): Boolean {
         if (tag.id.size != 8) {
             return false
         }
@@ -158,31 +172,40 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
         commandAuth1 += byteArrayOf(1, 0x00, 0x00, 1, 0x00, 0x00)
         commandAuth1 += ByteArray(8)
 
-        nfcF.timeout = 500
+        nfcF?.timeout = 500
 
-        val responseAuth1 = nfcF.transceive(commandAuth1)
+        try {
+            val responseAuth1 = nfcF?.transceive(commandAuth1) ?: return false
 
-        Log.d(TAG, "responseAuth1: ${responseAuth1.toHexString()}")
-
-        return responseAuth1[1] == 0x11.toByte()
+            Log.d(TAG, "responseAuth1: ${responseAuth1.toHexString()}")
+            return responseAuth1[1] == 0x11.toByte()
+        } catch (e: TagLostException) {
+            return false
+        }
     }
 
-    private fun emulate(nfcF: NfcF): Boolean {
+    private fun emulate(): Boolean {
         var responsePolling = byteArrayOf(18, 0x01)
         responsePolling += myIDm
         responsePolling += myPMm
 
+        var responsePolling2 = responsePolling.clone()
+        responsePolling2[0] = 20
+        responsePolling2 += mySys
+
         var responseSSC = byteArrayOf(13, 0x0D)
         responseSSC += myIDm
-        responseSSC += byteArrayOf(1, 0xAB.toByte(), 0xCD.toByte())
+        responseSSC += byteArrayOf(1) + mySys
 
-        nfcF.timeout = 60000
+        nfcF?.timeout = 60000
 
         var command: ByteArray
         try {
             // ダミーコマンドを送りレスポンスをコマンドとして受け取る
-            command = nfcF.transceive(byteArrayOf(1))
+            command = nfcF?.transceive(byteArrayOf(1)) ?: return false
         } catch (e: TagLostException) {
+            return false
+        } catch (e: IOException) {
             return false
         }
 
@@ -195,7 +218,12 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
             try {
                 val response: ByteArray = when (command[1].toInt()) {
-                    0x00 -> responsePolling
+                    0x00 -> when (command[4].toInt()) {
+                        0x00 -> responsePolling
+                        0x01 -> responsePolling2
+                        else -> responsePolling
+                    }
+
                     0x01 -> byteArrayOf(1)
                     0x0C -> responseSSC
                     else -> {
@@ -210,9 +238,11 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
                 Log.d(TAG, "response: ${response.toHexString()}")
 
-                command = nfcF.transceive(response)
+                command = nfcF?.transceive(response) ?: return false
             } catch (e: TagLostException) {
                 return true
+            } catch (e: IllegalStateException) {
+                return false
             }
         }
 
