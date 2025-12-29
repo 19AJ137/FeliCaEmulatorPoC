@@ -98,8 +98,8 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
     private fun enableReaderMode() {
         // リーダーモードの有効化
         val flags = NfcAdapter.FLAG_READER_NFC_F or // FeliCaを読み取る
-                NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK // NDEFチェックをスキップ
-        // NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS // システム音を無効化
+                NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK or // NDEFチェックをスキップ
+                NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS // システム音を無効化
 
         val options = Bundle()
         // 読み取り時の音を抑制したい場合は以下を追加（任意）
@@ -158,6 +158,9 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
             nfcF?.close()
             nfcF = null
         }
+
+        disableReaderMode()
+        enableReaderMode()
     }
 
     private fun auth1(tag: Tag): Boolean {
