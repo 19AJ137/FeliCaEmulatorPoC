@@ -152,7 +152,8 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
         } catch (e: Exception) {
             e.printStackTrace()
             runOnUiThread {
-                statusTextView.text = "エラーが発生しました\n${e.stackTraceToString()}"
+                statusTextView.text = "エラーが発生しました"
+                statusTextView.append(e.stackTraceToString())
             }
         } finally {
             nfcF?.close()
