@@ -18,6 +18,8 @@ Test3 以下をビルドします。
 2. 任意の FeliCa カード（Lite-S を推奨）を Android 端末にかざします
 3. その後端末をリーダにかざすと、Android 端末が FeliCa カードとして認識されることがあります
 
+FeliCa Lite-S シールを Android 端末の反応しやすい位置に貼り付けることで、動作が安定する場合があります。
+
 ## 動作原理
 
 まず Android 端末は NFC Type F のリーダとして動作します。
