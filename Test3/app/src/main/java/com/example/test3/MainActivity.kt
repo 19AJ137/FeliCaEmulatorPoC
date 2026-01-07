@@ -36,6 +36,11 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
     )
     private val mySys = byteArrayOf(0xAB.toByte(), 0xCD.toByte())
 
+    val block0 = ByteArray(16)
+    val block1 = ByteArray(16)
+    val block2 = ByteArray(16)
+    val block3 = ByteArray(16)
+
     companion object {
         private const val TAG = "FeliCaEmulatorPoC"
     }
@@ -148,11 +153,14 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
                 } else {
                     statusTextView.text = "エミュレートが失敗しました"
                 }
+                statusTextView.append("\n")
+                statusTextView.append("リーダからスマートフォンを離してください")
             }
         } catch (e: Exception) {
             e.printStackTrace()
             runOnUiThread {
                 statusTextView.text = "エラーが発生しました"
+                statusTextView.append("\n")
                 statusTextView.append(e.stackTraceToString())
             }
         } finally {
@@ -190,13 +198,37 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
     }
 
     private fun emulate(): Boolean {
-        var responsePolling = byteArrayOf(18, 0x01)
-        responsePolling += myIDm
-        responsePolling += myPMm
+        var responsePolling0 = byteArrayOf(18, 0x01)
+        responsePolling0 += myIDm
+        responsePolling0 += myPMm
 
-        var responsePolling2 = responsePolling.clone()
+        var responsePolling1 = responsePolling0.clone()
+        responsePolling1[0] = 20
+        responsePolling1 += mySys
+
+        var responsePolling2 = responsePolling0.clone()
         responsePolling2[0] = 20
-        responsePolling2 += mySys
+        responsePolling2 += byteArrayOf(0x00, 0x01)
+
+        var responseRR = byteArrayOf(11, 0x05)
+        responseRR += myIDm
+        responseRR += byteArrayOf(0x00)
+
+        var responseRWE0 = byteArrayOf(0, 0x07)
+        responseRWE0 += myIDm
+        responseRWE0 += byteArrayOf(0x00, 0x00)
+
+        var responseRWE1 = responseRWE0.clone()
+        responseRWE1[0] = 29
+        responseRWE1 += byteArrayOf(1)
+        responseRWE1 += block0
+
+        var responseRWE3 = responseRWE0.clone()
+        responseRWE3[0] = 61
+        responseRWE3 += byteArrayOf(3)
+        responseRWE3 += block0
+        responseRWE3 += block1
+        responseRWE3 += block2
 
         var responseSSC = byteArrayOf(13, 0x0D)
         responseSSC += myIDm
@@ -221,14 +253,41 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
                 statusTextView.text = "エミュレート中"
             }
 
-            val response: ByteArray = when (command[1].toInt()) {
+            val commandCode = command[1].toInt()
+
+            if (commandCode % 2 != 0) {
+                return false
+            }
+
+            if (commandCode != 0x00) {
+                if (!command.slice(2..9).toByteArray().contentEquals(myIDm)) {
+                    return false
+                }
+            }
+
+            if (commandCode == 0x00) {
+                val isSystemCodeValid = (command[2] == mySys[0] || command[2] == 0xFF.toByte()) &&
+                        (command[3] == mySys[1] || command[3] == 0xFF.toByte())
+                if (!isSystemCodeValid) {
+                    return false
+                }
+            }
+
+            val response: ByteArray = when (commandCode) {
                 0x00 -> when (command[4].toInt()) {
-                    0x00 -> responsePolling
-                    0x01 -> responsePolling2
-                    else -> responsePolling
+                    0x00 -> responsePolling0
+                    0x01 -> responsePolling1
+                    0x02 -> responsePolling2
+                    else -> return false
                 }
 
-                0x01 -> byteArrayOf(1)
+                0x04 -> responseRR
+                0x06 -> when (command[13].toInt()) {
+                    1 -> responseRWE1
+                    3 -> responseRWE3
+                    else -> return false
+                }
+
                 0x0C -> responseSSC
                 else -> {
                     Log.w(TAG, "Unknown Command")
